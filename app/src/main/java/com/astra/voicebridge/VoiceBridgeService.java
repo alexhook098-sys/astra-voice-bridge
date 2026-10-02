@@ -40,6 +40,12 @@ public class VoiceBridgeService extends Service {
     public static final String EXTRA_TEXT =
             "text";
 
+    public static final String ACTION_WAV_READY =
+            "com.astra.voicebridge.WAV_READY";
+
+    public static final String EXTRA_WAV_NAME =
+            "wav_name";
+
     private ServerSocket serverSocket;
     private Thread serverThread;
 
@@ -54,10 +60,6 @@ public class VoiceBridgeService extends Service {
     private String pendingText = null;
 
 
-    // =========================================================
-    // SERVICE CREATE
-    // =========================================================
-
     @Override
     public void onCreate() {
 
@@ -68,16 +70,12 @@ public class VoiceBridgeService extends Service {
         startForeground(
                 NOTIFICATION_ID,
                 createNotification(
-                        "Voice server starting..."
+                        "ONLINE • HTTP 8765 • TTS starting..."
                 )
         );
 
         running = true;
 
-
-        // =====================================================
-        // TTS
-        // =====================================================
 
         tts =
                 new TextToSpeech(
@@ -111,7 +109,7 @@ public class VoiceBridgeService extends Service {
                                     ttsReady = false;
 
                                     updateNotification(
-                                            "TTS unavailable"
+                                            "OFFLINE • TTS unavailable"
                                     );
 
                                 } else {
@@ -119,13 +117,9 @@ public class VoiceBridgeService extends Service {
                                     ttsReady = true;
 
                                     updateNotification(
-                                            "Voice server ONLINE • Port 8765"
+                                            "ONLINE • HTTP 8765 • TTS ONLINE"
                                     );
 
-
-                                    // ---------------------------------
-                                    // Выполняем отложенный запрос
-                                    // ---------------------------------
 
                                     String textToGenerate =
                                             null;
@@ -162,16 +156,12 @@ public class VoiceBridgeService extends Service {
                                 ttsReady = false;
 
                                 updateNotification(
-                                        "TTS initialization failed"
+                                        "OFFLINE • TTS initialization failed"
                                 );
                             }
                         }
                 );
 
-
-        // =====================================================
-        // HTTP SERVER
-        // =====================================================
 
         startHttpServer();
 
@@ -182,22 +172,12 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // START COMMAND
-    // =========================================================
-
     @Override
     public int onStartCommand(
             Intent intent,
             int flags,
             int startId
     ) {
-
-        // =====================================================
-        // Команда от MainActivity:
-        //
-        // GENERATE_WAV + text
-        // =====================================================
 
         if (
                 intent != null
@@ -230,10 +210,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // REQUEST WAV
-    // =========================================================
-
     private synchronized void requestWavGeneration(
             String text
     ) {
@@ -250,12 +226,8 @@ public class VoiceBridgeService extends Service {
 
         } else {
 
-            // TTS ещё запускается.
-            // Сохраняем последний запрос.
-
             pendingText =
                     text;
-
 
             System.out.println(
                     "[ASTRA VOICE BRIDGE] "
@@ -265,10 +237,6 @@ public class VoiceBridgeService extends Service {
         }
     }
 
-
-    // =========================================================
-    // HTTP SERVER
-    // =========================================================
 
     private void startHttpServer() {
 
@@ -332,10 +300,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // HTTP REQUEST
-    // =========================================================
-
     private void handleHttpRequest(
             Socket socket
     ) {
@@ -368,10 +332,6 @@ public class VoiceBridgeService extends Service {
             String responseText;
 
 
-            // =================================================
-            // GET /status
-            // =================================================
-
             if (
                     requestLine.startsWith(
                             "GET /status"
@@ -391,10 +351,6 @@ public class VoiceBridgeService extends Service {
 
             }
 
-
-            // =================================================
-            // GET /speak
-            // =================================================
 
             else if (
                     requestLine.startsWith(
@@ -432,10 +388,6 @@ public class VoiceBridgeService extends Service {
                 }
             }
 
-
-            // =================================================
-            // POST /speak
-            // =================================================
 
             else if (
                     requestLine.startsWith(
@@ -542,10 +494,6 @@ public class VoiceBridgeService extends Service {
             }
 
 
-            // =================================================
-            // UNKNOWN
-            // =================================================
-
             else {
 
                 responseText =
@@ -590,10 +538,6 @@ public class VoiceBridgeService extends Service {
         }
     }
 
-
-    // =========================================================
-    // EXTRACT TEXT
-    // =========================================================
 
     private String extractTextFromRequest(
             String requestLine
@@ -686,10 +630,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // SEND HTTP RESPONSE
-    // =========================================================
-
     private void sendHttpResponse(
             Socket socket,
             String body
@@ -733,10 +673,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // TTS → WAV
-    // =========================================================
-
     private synchronized void generateWav(
             String text
     ) {
@@ -747,11 +683,6 @@ public class VoiceBridgeService extends Service {
                 tts == null
         ) {
 
-            System.out.println(
-                    "[ASTRA VOICE BRIDGE] "
-                            + "TTS NOT READY"
-            );
-
             pendingText =
                     text;
 
@@ -761,15 +692,19 @@ public class VoiceBridgeService extends Service {
 
         try {
 
+            String wavName =
+                    "astra_"
+                            + System.currentTimeMillis()
+                            + ".wav";
+
+
             ContentValues values =
                     new ContentValues();
 
 
             values.put(
                     MediaStore.Downloads.DISPLAY_NAME,
-                    "astra_"
-                            + System.currentTimeMillis()
-                            + ".wav"
+                    wavName
             );
 
 
@@ -811,11 +746,6 @@ public class VoiceBridgeService extends Service {
             if (
                     uri == null
             ) {
-
-                System.out.println(
-                        "[ASTRA VOICE BRIDGE] "
-                                + "FAILED TO CREATE WAV"
-                );
 
                 return;
             }
@@ -903,9 +833,29 @@ public class VoiceBridgeService extends Service {
                             }
 
 
+                            Intent readyIntent =
+                                    new Intent(
+                                            ACTION_WAV_READY
+                                    );
+
+                            readyIntent.setPackage(
+                                    getPackageName()
+                            );
+
+                            readyIntent.putExtra(
+                                    EXTRA_WAV_NAME,
+                                    wavName
+                            );
+
+                            sendBroadcast(
+                                    readyIntent
+                            );
+
+
                             System.out.println(
                                     "[ASTRA VOICE BRIDGE] "
-                                            + "WAV READY"
+                                            + "WAV READY: "
+                                            + wavName
                             );
                         }
 
@@ -967,12 +917,6 @@ public class VoiceBridgeService extends Service {
                         null,
                         null
                 );
-
-
-                System.out.println(
-                        "[ASTRA VOICE BRIDGE] "
-                                + "TTS FAILED"
-                );
             }
 
 
@@ -986,10 +930,6 @@ public class VoiceBridgeService extends Service {
         }
     }
 
-
-    // =========================================================
-    // NOTIFICATION
-    // =========================================================
 
     private Notification createNotification(
             String text
@@ -1080,10 +1020,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // DESTROY
-    // =========================================================
-
     @Override
     public void onDestroy() {
 
@@ -1133,10 +1069,6 @@ public class VoiceBridgeService extends Service {
     }
 
 
-    // =========================================================
-    // BIND
-    // =========================================================
-
     @Override
     public IBinder onBind(
             Intent intent
@@ -1145,10 +1077,6 @@ public class VoiceBridgeService extends Service {
         return null;
     }
 
-
-    // =========================================================
-    // JSON ESCAPE
-    // =========================================================
 
     private String escapeJson(
             String text
@@ -1180,4 +1108,4 @@ public class VoiceBridgeService extends Service {
                         "\\r"
                 );
     }
-    }
+}
