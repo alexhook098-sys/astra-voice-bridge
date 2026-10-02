@@ -4,20 +4,20 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
 import android.content.Intent;
-import android.speech.tts.TextToSpeech;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.util.Locale;
-
 public class MainActivity extends Activity {
 
-    private TextToSpeech tts;
     private TextView statusText;
     private EditText textInput;
 
+
+    // =========================================================
+    // CREATE
+    // =========================================================
 
     @Override
     protected void onCreate(
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
 
 
         // =====================================================
-        // SPEAK BUTTON
+        // WAV BUTTON
         // =====================================================
 
         Button speakButton =
@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
                 new TextView(this);
 
         statusText.setText(
-                "Запуск TTS..."
+                "Запуск Voice Bridge..."
         );
 
         statusText.setTextSize(
@@ -133,65 +133,10 @@ public class MainActivity extends Activity {
 
 
         // =====================================================
-        // TTS FOR UI TEST
+        // START SERVICE
         // =====================================================
 
-        tts =
-                new TextToSpeech(
-                        this,
-                        status -> {
-
-                            if (
-                                    status ==
-                                            TextToSpeech.SUCCESS
-                            ) {
-
-                                int result =
-                                        tts.setLanguage(
-                                                new Locale(
-                                                        "ru",
-                                                        "RU"
-                                                )
-                                        );
-
-
-                                if (
-                                        result ==
-                                                TextToSpeech
-                                                        .LANG_MISSING_DATA
-                                                ||
-                                        result ==
-                                                TextToSpeech
-                                                        .LANG_NOT_SUPPORTED
-                                ) {
-
-                                    statusText.setText(
-                                            "Русский язык TTS недоступен"
-                                    );
-
-                                } else {
-
-                                    statusText.setText(
-                                            "TTS готов.\n"
-                                                    + "Voice Bridge Service запускается..."
-                                    );
-
-
-                                    // =================================
-                                    // START FOREGROUND SERVICE
-                                    // =================================
-
-                                    startVoiceBridgeService();
-                                }
-
-                            } else {
-
-                                statusText.setText(
-                                        "Не удалось запустить TTS"
-                                );
-                            }
-                        }
-                );
+        startVoiceBridgeService();
 
 
         // =====================================================
@@ -200,11 +145,6 @@ public class MainActivity extends Activity {
 
         speakButton.setOnClickListener(
                 v -> {
-
-                    statusText.setText(
-                            "WAV создаётся через Voice Bridge..."
-                    );
-
 
                     String text =
                             textInput
@@ -218,7 +158,7 @@ public class MainActivity extends Activity {
                     ) {
 
                         statusText.setText(
-                                "Нет текста"
+                                "Введите текст"
                         );
 
                         return;
@@ -226,25 +166,11 @@ public class MainActivity extends Activity {
 
 
                     // -----------------------------------------
-                    // Используем локальный TTS для теста UI.
-                    // HTTP /speak работает через Service.
+                    // Отправляем текст напрямую в Service
                     // -----------------------------------------
 
-                    String utteranceId =
-                            "ui_test_"
-                                    + System.currentTimeMillis();
-
-
-                    tts.speak(
-                            text,
-                            TextToSpeech.QUEUE_FLUSH,
-                            null,
-                            utteranceId
-                    );
-
-
-                    statusText.setText(
-                            "TTS воспроизводит текст..."
+                    generateWav(
+                            text
                     );
                 }
         );
@@ -311,8 +237,7 @@ public class MainActivity extends Activity {
 
 
             statusText.setText(
-                    "TTS готов.\n"
-                            + "Voice Bridge Service запускается..."
+                    "Voice Bridge Service запущен"
             );
 
 
@@ -327,7 +252,71 @@ public class MainActivity extends Activity {
 
 
     // =========================================================
-    // CLEANUP
+    // GENERATE WAV
+    // =========================================================
+
+    private void generateWav(
+            String text
+    ) {
+
+        try {
+
+            Intent serviceIntent =
+                    new Intent(
+                            this,
+                            VoiceBridgeService.class
+                    );
+
+
+            serviceIntent.setAction(
+                    VoiceBridgeService
+                            .ACTION_GENERATE_WAV
+            );
+
+
+            serviceIntent.putExtra(
+                    VoiceBridgeService
+                            .EXTRA_TEXT,
+                    text
+            );
+
+
+            if (
+                    Build.VERSION.SDK_INT
+                            >=
+                    Build.VERSION_CODES.O
+            ) {
+
+                startForegroundService(
+                        serviceIntent
+                );
+
+            } else {
+
+                startService(
+                        serviceIntent
+                );
+            }
+
+
+            statusText.setText(
+                    "WAV создаётся...\n"
+                            + "Папка: Download/ASTRA"
+            );
+
+
+        } catch (Exception e) {
+
+            statusText.setText(
+                    "Ошибка создания WAV:\n"
+                            + e.getMessage()
+            );
+        }
+    }
+
+
+    // =========================================================
+    // DESTROY
     // =========================================================
 
     @Override
@@ -336,23 +325,13 @@ public class MainActivity extends Activity {
         /*
          * ВАЖНО:
          *
-         * Мы НЕ останавливаем VoiceBridgeService здесь.
+         * MainActivity НЕ останавливает
+         * VoiceBridgeService.
          *
-         * Поэтому закрытие окна SIRIUS/Voice Bridge
-         * не должно останавливать HTTP-сервер.
+         * Service продолжает работать
+         * после закрытия окна приложения.
          */
-
-
-        if (
-                tts != null
-        ) {
-
-            tts.stop();
-
-            tts.shutdown();
-        }
-
 
         super.onDestroy();
     }
-}
+                }
