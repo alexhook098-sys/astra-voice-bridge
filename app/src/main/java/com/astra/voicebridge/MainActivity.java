@@ -3,7 +3,10 @@ package com.astra.voicebridge;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -13,6 +16,57 @@ public class MainActivity extends Activity {
 
     private TextView statusText;
     private EditText textInput;
+
+
+    // =========================================================
+    // WAV READY RECEIVER
+    // =========================================================
+
+    private final BroadcastReceiver wavReadyReceiver =
+            new BroadcastReceiver() {
+
+                @Override
+                public void onReceive(
+                        Context context,
+                        Intent intent
+                ) {
+
+                    if (
+                            VoiceBridgeService
+                                    .ACTION_WAV_READY
+                                    .equals(
+                                            intent.getAction()
+                                    )
+                    ) {
+
+                        String wavName =
+                                intent.getStringExtra(
+                                        VoiceBridgeService
+                                                .EXTRA_WAV_NAME
+                                );
+
+
+                        if (
+                                wavName != null
+                        ) {
+
+                            statusText.setText(
+                                    "✅ WAV создан\n"
+                                            + wavName
+                                            + "\n"
+                                            + "Папка: Download/ASTRA"
+                            );
+
+                        } else {
+
+                            statusText.setText(
+                                    "✅ WAV создан\n"
+                                            + "Папка: Download/ASTRA"
+                            );
+                        }
+                    }
+                }
+            };
 
 
     // =========================================================
@@ -26,10 +80,6 @@ public class MainActivity extends Activity {
 
         super.onCreate(savedInstanceState);
 
-
-        // =====================================================
-        // UI
-        // =====================================================
 
         LinearLayout layout =
                 new LinearLayout(this);
@@ -46,10 +96,6 @@ public class MainActivity extends Activity {
         );
 
 
-        // =====================================================
-        // TITLE
-        // =====================================================
-
         TextView title =
                 new TextView(this);
 
@@ -61,10 +107,6 @@ public class MainActivity extends Activity {
                 26
         );
 
-
-        // =====================================================
-        // TEXT INPUT
-        // =====================================================
 
         textInput =
                 new EditText(this);
@@ -78,10 +120,6 @@ public class MainActivity extends Activity {
         );
 
 
-        // =====================================================
-        // WAV BUTTON
-        // =====================================================
-
         Button speakButton =
                 new Button(this);
 
@@ -89,10 +127,6 @@ public class MainActivity extends Activity {
                 "Создать WAV"
         );
 
-
-        // =====================================================
-        // STATUS
-        // =====================================================
 
         statusText =
                 new TextView(this);
@@ -106,30 +140,44 @@ public class MainActivity extends Activity {
         );
 
 
+        layout.addView(title);
+        layout.addView(textInput);
+        layout.addView(speakButton);
+        layout.addView(statusText);
+
+        setContentView(layout);
+
+
         // =====================================================
-        // ADD UI
+        // REGISTER RECEIVER
         // =====================================================
 
-        layout.addView(
-                title
-        );
-
-        layout.addView(
-                textInput
-        );
-
-        layout.addView(
-                speakButton
-        );
-
-        layout.addView(
-                statusText
-        );
+        IntentFilter filter =
+                new IntentFilter(
+                        VoiceBridgeService
+                                .ACTION_WAV_READY
+                );
 
 
-        setContentView(
-                layout
-        );
+        if (
+                Build.VERSION.SDK_INT
+                        >=
+                Build.VERSION_CODES.TIRAMISU
+        ) {
+
+            registerReceiver(
+                    wavReadyReceiver,
+                    filter,
+                    Context.RECEIVER_NOT_EXPORTED
+            );
+
+        } else {
+
+            registerReceiver(
+                    wavReadyReceiver,
+                    filter
+            );
+        }
 
 
         // =====================================================
@@ -165,13 +213,7 @@ public class MainActivity extends Activity {
                     }
 
 
-                    // -----------------------------------------
-                    // Отправляем текст напрямую в Service
-                    // -----------------------------------------
-
-                    generateWav(
-                            text
-                    );
+                    generateWav(text);
                 }
         );
 
@@ -204,7 +246,7 @@ public class MainActivity extends Activity {
 
 
     // =========================================================
-    // START VOICE BRIDGE SERVICE
+    // START SERVICE
     // =========================================================
 
     private void startVoiceBridgeService() {
@@ -237,7 +279,8 @@ public class MainActivity extends Activity {
 
 
             statusText.setText(
-                    "Voice Bridge Service запущен"
+                    "Voice Bridge ONLINE\n"
+                            + "HTTP 8765 • TTS ONLINE"
             );
 
 
@@ -300,8 +343,7 @@ public class MainActivity extends Activity {
 
 
             statusText.setText(
-                    "WAV создаётся...\n"
-                            + "Папка: Download/ASTRA"
+                    "🔄 WAV создаётся..."
             );
 
 
@@ -322,9 +364,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
 
+        try {
+
+            unregisterReceiver(
+                    wavReadyReceiver
+            );
+
+        } catch (Exception ignored) {
+        }
+
+
         /*
-         * ВАЖНО:
-         *
          * MainActivity НЕ останавливает
          * VoiceBridgeService.
          *
@@ -334,4 +384,4 @@ public class MainActivity extends Activity {
 
         super.onDestroy();
     }
-                }
+                        }
