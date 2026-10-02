@@ -34,6 +34,12 @@ public class VoiceBridgeService extends Service {
     private static final int PORT =
             8765;
 
+    public static final String ACTION_GENERATE_WAV =
+            "com.astra.voicebridge.GENERATE_WAV";
+
+    public static final String EXTRA_TEXT =
+            "text";
+
     private ServerSocket serverSocket;
     private Thread serverThread;
 
@@ -45,6 +51,8 @@ public class VoiceBridgeService extends Service {
     private volatile boolean ttsReady =
             false;
 
+    private String pendingText = null;
+
 
     // =========================================================
     // SERVICE CREATE
@@ -55,9 +63,7 @@ public class VoiceBridgeService extends Service {
 
         super.onCreate();
 
-
         createNotificationChannel();
-
 
         startForeground(
                 NOTIFICATION_ID,
@@ -66,13 +72,12 @@ public class VoiceBridgeService extends Service {
                 )
         );
 
-
         running = true;
 
 
-        // -----------------------------------------------------
+        // =====================================================
         // TTS
-        // -----------------------------------------------------
+        // =====================================================
 
         tts =
                 new TextToSpeech(
@@ -116,6 +121,40 @@ public class VoiceBridgeService extends Service {
                                     updateNotification(
                                             "Voice server ONLINE • Port 8765"
                                     );
+
+
+                                    // ---------------------------------
+                                    // Выполняем отложенный запрос
+                                    // ---------------------------------
+
+                                    String textToGenerate =
+                                            null;
+
+                                    synchronized (
+                                            VoiceBridgeService.this
+                                    ) {
+
+                                        if (
+                                                pendingText != null
+                                        ) {
+
+                                            textToGenerate =
+                                                    pendingText;
+
+                                            pendingText =
+                                                    null;
+                                        }
+                                    }
+
+
+                                    if (
+                                            textToGenerate != null
+                                    ) {
+
+                                        generateWav(
+                                                textToGenerate
+                                        );
+                                    }
                                 }
 
                             } else {
@@ -130,9 +169,9 @@ public class VoiceBridgeService extends Service {
                 );
 
 
-        // -----------------------------------------------------
+        // =====================================================
         // HTTP SERVER
-        // -----------------------------------------------------
+        // =====================================================
 
         startHttpServer();
 
@@ -140,6 +179,90 @@ public class VoiceBridgeService extends Service {
         System.out.println(
                 "[ASTRA VOICE BRIDGE] STARTED"
         );
+    }
+
+
+    // =========================================================
+    // START COMMAND
+    // =========================================================
+
+    @Override
+    public int onStartCommand(
+            Intent intent,
+            int flags,
+            int startId
+    ) {
+
+        // =====================================================
+        // Команда от MainActivity:
+        //
+        // GENERATE_WAV + text
+        // =====================================================
+
+        if (
+                intent != null
+                        &&
+                ACTION_GENERATE_WAV.equals(
+                        intent.getAction()
+                )
+        ) {
+
+            String text =
+                    intent.getStringExtra(
+                            EXTRA_TEXT
+                    );
+
+
+            if (
+                    text != null
+                            &&
+                    !text.trim().isEmpty()
+            ) {
+
+                requestWavGeneration(
+                        text.trim()
+                );
+            }
+        }
+
+
+        return START_STICKY;
+    }
+
+
+    // =========================================================
+    // REQUEST WAV
+    // =========================================================
+
+    private synchronized void requestWavGeneration(
+            String text
+    ) {
+
+        if (
+                ttsReady
+                        &&
+                tts != null
+        ) {
+
+            generateWav(
+                    text
+            );
+
+        } else {
+
+            // TTS ещё запускается.
+            // Сохраняем последний запрос.
+
+            pendingText =
+                    text;
+
+
+            System.out.println(
+                    "[ASTRA VOICE BRIDGE] "
+                            + "TTS NOT READY — "
+                            + "REQUEST QUEUED"
+            );
+        }
     }
 
 
@@ -297,8 +420,8 @@ public class VoiceBridgeService extends Service {
 
                 } else {
 
-                    generateWav(
-                            text
+                    requestWavGeneration(
+                            text.trim()
                     );
 
 
@@ -406,7 +529,7 @@ public class VoiceBridgeService extends Service {
 
                 } else {
 
-                    generateWav(
+                    requestWavGeneration(
                             text
                     );
 
@@ -628,6 +751,9 @@ public class VoiceBridgeService extends Service {
                     "[ASTRA VOICE BRIDGE] "
                             + "TTS NOT READY"
             );
+
+            pendingText =
+                    text;
 
             return;
         }
@@ -955,21 +1081,6 @@ public class VoiceBridgeService extends Service {
 
 
     // =========================================================
-    // START COMMAND
-    // =========================================================
-
-    @Override
-    public int onStartCommand(
-            Intent intent,
-            int flags,
-            int startId
-    ) {
-
-        return START_STICKY;
-    }
-
-
-    // =========================================================
     // DESTROY
     // =========================================================
 
@@ -977,6 +1088,9 @@ public class VoiceBridgeService extends Service {
     public void onDestroy() {
 
         running = false;
+
+        pendingText =
+                null;
 
 
         if (
@@ -1066,4 +1180,4 @@ public class VoiceBridgeService extends Service {
                         "\\r"
                 );
     }
-}
+    }
